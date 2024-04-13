@@ -12,6 +12,7 @@ function _draw()
 	cls()
 	
 	foreach(minions,draw_minion)
+	
 	draw_floor(80)
 end
 
@@ -19,23 +20,32 @@ function _update()
 	t+=1
 	
 	foreach(minions,update_minion)
+	
+	--collisions
+	minions_vs_minions()
 end
 
 function reset_game()
 	minions={}
 	t=0
 	
-	spawn_minion(8,80)
+	spawn_minion(8,80,1)
+	spawn_minion(120,80,-1)
 end
 -->8
 -- minions
-function spawn_minion(x,y)
+function spawn_minion(x,y,dir)
 	local m={
 		x=x,
 		y=y,
 		t=0,
+		dir=dir,
+		status="move",
 		kind="small"}
-		
+
+	m.img=spr_for_minion(m)
+	m.size=size_for_minion(m)
+	
 	add(minions,m)
 	
 	return m
@@ -44,7 +54,8 @@ end
 function draw_minion(m)
 	local frame=(m.t/10)%2
 	local img=spr_for_minion(m)+frame
-	spr(img,m.x-4,m.y-8)
+	local flipx=m.dir<0
+	spr(img,m.x-4,m.y-8,1,1,flipx)
 end
 
 function spr_for_minion(m)
@@ -55,9 +66,63 @@ function spr_for_minion(m)
 	return nil
 end
 
+function size_for_minion(m)
+	if m.kind=="small" then
+		return 2
+	end
+	
+	return 4
+end
+
 function update_minion(m)
 	m.t+=1
-	m.x+=1
+	
+	if m.status=="move" then
+		m.x+=m.dir
+	end
+end
+
+function is_baddie(m)
+	return m.dir<0
+end
+
+function is_ally(m)
+	return m.dir>0
+end
+
+function minions_vs_minions()
+	for m in all(minions) do
+		for other in all(minions) do
+			if is_collision_minion_vs_minion(m,other) then
+				attack_minion(m,other)
+			end
+		end
+	end
+end
+
+function is_collision_minion_vs_minion(m,other)
+	-- avoid collision with themselves
+	if m==other then
+		return false
+	end
+	
+	-- check if collision with enemies
+	local are_enemies=m.dir!=other.dir
+	local diff=abs(m.x-other.x)
+	if diff<m.size and are_enemies then
+		return true
+	end
+	
+	return false
+end
+
+function attack_minion(m,other)
+	m.status="attack"
+	hit_minion(other)
+end
+
+function hit_minion(m)
+	del(minions,m)
 end
 -->8
 -- hud and attrezo
