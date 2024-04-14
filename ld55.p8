@@ -3,7 +3,17 @@ version 42
 __lua__
 -- general
 
+screen=nil
+
 function _init()
+	debug=true
+	reset_game()
+	
+	--init_start()
+	reset_level()
+end
+
+function reset_game()
 	poke(0x5f2d,0x3)
 	screen="start"
 	
@@ -30,10 +40,8 @@ function _init()
 		down=false,
 		hover=false
 	}
-	buttons={}
-	
-	--init_start()
-	reset_level()
+	update_mouse()
+	buttons={}	
 end
 
 function _draw()
@@ -41,6 +49,10 @@ function _draw()
 		draw_start()
 	elseif screen=="level" then
 		draw_level()
+	elseif screen=="victory" then
+		draw_victory()
+	elseif screen=="gameover" then
+		draw_gameover()
 	end
 end
 
@@ -49,10 +61,15 @@ function _update()
 		update_start()
 	elseif screen=="level" then
 		update_level()
+	elseif screen=="victory" then
+		update_victory()
+	elseif screen=="gameover" then
+		update_gameover()
 	end
 end
 
 function init_start()
+	towers={}
 	spawn_tower(0,100)
 	spawn_tower(112,100)
 end
@@ -106,6 +123,10 @@ function draw_level()
 end
 
 function update_level()
+	if debug and btnp(🅾️) then
+		init_victory()
+	end
+	
 	t+=1
 
 	update_mouse()
@@ -126,17 +147,20 @@ function update_level()
 end
 
 function reset_level()
+	t=0
 	screen="level"
 	souls=2
+	towers={}
+	if debug then
+		souls=200
+	end
 	
-	ally_t=spawn_tower(0,100)
-	baddie_t=spawn_tower(112,100)
+	ally_t=spawn_tower(0,1)
+	baddie_t=spawn_tower(112,1)
 	
 	ally_bar=make_bar(22,16,32,1,ally_t.life,ally_t.life,83)
 	baddie_bar=make_bar(68,16,32,1,baddie_t.life,baddie_t.life,84,true)
 	
-	ally_bar.val=0
-	baddie_bar.val=0
 	buy_small_btn=make_button(60,96,17,on_small_click,"2✽")
 	
 	spawn_minion(128,80,-1)
@@ -145,6 +169,10 @@ function reset_level()
 end
 
 function maybe_spawn_baddie_minion()
+	if baddie_t.life==0 then
+		return
+	end
+	
 	if t%(minion_spawn_ratio)==0 then
 			minion_spawn_ratio=180+flr(rnd(30))
 			spawn_minion(128,80,-1)
@@ -159,6 +187,78 @@ function maybe_spawn_soul_pickup()
 		
 		return spawn_soul_pickup()
 	end
+end
+
+-- victory screen
+
+function init_victory()
+	sfx(7)
+	screen="victory"
+	buttons={}
+	minions={}
+end
+
+function update_victory()
+	t+=1
+	update_mouse()
+	
+	foreach(pickups,update_pickup)
+	foreach(towers,update_tower)
+	
+	if mouse.down then
+		reset_game()
+		init_start()
+	end
+end
+
+function draw_victory()
+	cls()
+	draw_floor(80)
+
+	foreach(pickups,draw_pickup)
+	foreach(towers,draw_tower)
+	
+	local txt="victory"
+	print("\^w\^t"..txt,text_center(txt,64,2),32,7)
+	txt="click to continue"
+	print(txt,text_center(txt),48)
+	draw_mouse()
+end
+
+-- gameover
+
+function init_gameover()
+	sfx(7)
+	screen="gameover"
+	buttons={}
+	minions={}
+end
+
+function update_gameover()
+	t+=1
+	update_mouse()
+	
+	foreach(pickups,update_pickup)
+	foreach(towers,update_tower)
+	
+	if mouse.down then
+		reset_game()
+		init_start()
+	end
+end
+
+function draw_gameover()
+	cls()
+	draw_floor(80)
+
+	foreach(pickups,draw_pickup)
+	foreach(towers,draw_tower)
+	
+	local txt="game over"
+	print("\^w\^t"..txt,text_center(txt,64,2),32,7)
+	txt="click to continue"
+	print(txt,text_center(txt),48)
+	draw_mouse()
 end
 -->8
 -- minions
@@ -233,6 +333,10 @@ end
 function update_minion(m)
 	m.t+=1
 	m.flash=max(0,m.flash-1)
+	
+	if ally_t.life<=0 or ally_t.life<=0 then
+		return
+	end
 	
 	if m.status=="move" then
 		update_minion_move(m)
@@ -441,6 +545,8 @@ end
 -- towers ------------
 
 function draw_tower(tw)
+	clip(0,0,128,80)
+
 	draw_necromancer(tw)
 	
 	if tw.flash>0 then
@@ -448,8 +554,10 @@ function draw_tower(tw)
 	end
 	
 	local flipx=tw.x>64
-	spr(64,tw.x,48,2,4,flipx)
+	spr(64,tw.x,tw.y,2,4,flipx)
+	
 	pal()
+	clip()
 end
 
 function draw_necromancer(tw)
@@ -461,19 +569,34 @@ function draw_necromancer(tw)
 		wzd=68
 	end
 	
-	spr(wzd,x,48+offset_y)
+	spr(wzd,x,tw.y+offset_y)
 end
 
-function update_tower(t)
-	t.flash=max(0,t.flash-1)
+function update_tower(tw)
+	tw.t+=1
+	tw.flash=max(0,tw.flash-1)
+	
+	if screen!="level" then
+		return
+	end
+	
+	if tw.life<=0 then
+		if tw.y<80 then
+			tw.y+=rnd(2)/2
+		else
+			destroy_tower(tw)
+		end
+	end
 end
 
 
 function spawn_tower(x,life)
 	local t={
 		x=x,
+		y=48,
 		life=life,
-		flash=0
+		flash=0,
+		t=0,
 	}
 	
 	add(towers,t)
@@ -495,7 +618,15 @@ function hit_tower(t,dmg)
 	end
 	
 	if t.life<=0 then
-		destroy_tower(t)
+		t.t=0
+		sfx(8)
+		
+		-- delete minions inside towers
+		for m in all(minions) do
+			if m.x<16 or m.x>112 then
+				del(minions,m)
+			end
+		end
 	end
 end
 
@@ -505,14 +636,6 @@ function destroy_tower(tw)
 	else
 		init_victory()
 	end
-end
-
-function init_gameover()
-
-end
-
-function init_victory()
-
 end
 
 function is_ally_tower(tw)
@@ -555,12 +678,16 @@ function dist(a,b)
 	return sqrt(dx*dx + dy*dy)
 end
 
-function text_center(txt,src_x)
+function text_center(txt,src_x,scale)
+	if scale==nil then
+		scale=1
+	end
+	
 	if src_x==nil then
 		src_x=64
 	end
 	
-	return src_x-(#txt*2)
+	return src_x-(#txt*2*scale)
 end
 -->8
 -- ui
@@ -617,7 +744,7 @@ function draw_button(b)
 	
 	if b.label!=nil then
 		local x=text_center(b.label,b.x+3)
-		print(b.label,x,b.y+10)
+		print(b.label,x,b.y+10,7)
 	end
 end
 
@@ -731,6 +858,7 @@ end
 function disable_unaffordable()
 	buy_small_btn.disabled=
 		souls<price_for_minion("small")
+	 or ally_t.life<=0
 end
 __gfx__
 00000000777100007881000000000000000000000000000000000000000000001111111111111111000000000000000000000000000000000000000000000000
@@ -855,3 +983,5 @@ __sfx__
 0008000022750257402a7303271000700007000070000700007000070000700007000070000700007000070000700007000070000700007000070000700007000070000700007000070000700007000070000700
 0006000023550295502d550345502a5502c5502755030540375303f51033500355003850000500005000050000500005000050000500005000050000500005000050000500005000050000500005000050000500
 000800001605018050180501b0501e0501f05024050270502b0502f050360502f05028050200501d040130400d0301b040250400b0200001033000370003d0003e0003f0003f0003f00000000000000000000000
+000c00002fe6031e6032e6033e6036e7038e603fe702ce6031e703ce6036e702be6016e7012e6016e701de7027e702fe7034e6036e7033e7029e701ae7012e701ce7037e6039e402fe3027e2022e101ee5024e50
+000800003b6303c6403b64039650376603566033670306702e6502b640266303563033630316302e6402c6402665021650186502765024640216401f63018620116400b6501a66017650136500e6400b63000620
