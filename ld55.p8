@@ -772,6 +772,7 @@ function draw_hud()
 	if baddie_t.life<=0 then
 		return
 	end
+	
 	if level<=2 and souls>=2 then
 		txt="click to\nsummon ->"
 		print(txt,20,91,blink())
