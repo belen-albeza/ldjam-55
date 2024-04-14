@@ -6,16 +6,18 @@ __lua__
 screen=nil
 
 function _init()
-	debug=true
+	debug=false
 	reset_game()
 	
-	--init_start()
-	reset_level()
+	init_start()
+	--reset_level()
 end
 
 function reset_game()
 	poke(0x5f2d,0x3)
 	screen="start"
+	level=1
+	max_level=5
 	
 	minions={}
 	towers={}
@@ -68,6 +70,8 @@ function _update()
 	end
 end
 
+-- start screen
+
 function init_start()
 	towers={}
 	spawn_tower(0,100)
@@ -105,6 +109,17 @@ function draw_start()
 	draw_mouse()
 end
 
+-- level screen
+
+function next_level()
+	level+=1
+	if level<=max_level then
+		reset_level()
+	else
+		init_victory()
+	end
+end
+
 function draw_level()
 	cls()
 	draw_screenshake()
@@ -119,14 +134,14 @@ function draw_level()
 	draw_hud()
 	foreach(bars,draw_bar)
 	foreach(buttons,draw_button)
-	draw_mouse()	
+	draw_mouse()
+	
+	if debug then
+		print(minion_spawn_ratio,0,0,7)
+	end
 end
 
 function update_level()
-	if debug and btnp(🅾️) then
-		init_victory()
-	end
-	
 	t+=1
 
 	update_mouse()
@@ -151,37 +166,54 @@ function reset_level()
 	screen="level"
 	souls=2
 	towers={}
-	if debug then
-		souls=200
+	minions={}
+	pickups={}
+	
+	local baddie_life=level*20
+	if level<3 then
+		baddie_life=level*10
 	end
 	
-	ally_t=spawn_tower(0,1)
-	baddie_t=spawn_tower(112,1)
+	if debug then
+		souls=200
+		baddie_life=level*10
+	end
+	
+	ally_t=spawn_tower(0,100)
+	baddie_t=spawn_tower(112,baddie_life)
 	
 	ally_bar=make_bar(22,16,32,1,ally_t.life,ally_t.life,83)
 	baddie_bar=make_bar(68,16,32,1,baddie_t.life,baddie_t.life,84,true)
 	
 	buy_small_btn=make_button(60,96,17,on_small_click,"2✽")
 	
-	spawn_minion(128,80,-1)
+	if level>1 then
+		spawn_soul_pickup()
+	end
+	if level>2 then
+	 spawn_minion(128,80,-1)
+	end
 	
-	spawn_soul_pickup()
 end
 
 function maybe_spawn_baddie_minion()
-	if baddie_t.life==0 then
+	if level<=2 or baddie_t.life==0 then
 		return
 	end
 	
 	if t%(minion_spawn_ratio)==0 then
-			minion_spawn_ratio=180+flr(rnd(30))
+			minion_spawn_ratio=(210-level*30)--+flr(rnd(30))
 			spawn_minion(128,80,-1)
 	end
 end
 
 function maybe_spawn_soul_pickup()
+	if level<2 then
+		return
+	end
+	
 	if t%soul_spawn_ratio==0 then
-		if rnd(10)<=2 then
+		if rnd(100)<=10 then
 			return spawn_big_soul_pickup()
 		end
 		
@@ -222,6 +254,10 @@ function draw_victory()
 	print("\^w\^t"..txt,text_center(txt,64,2),32,7)
 	txt="click to continue"
 	print(txt,text_center(txt),48)
+	
+	txt="bwaha\nha ha!"
+	print(txt,1,34,blink())
+	
 	draw_mouse()
 end
 
@@ -259,6 +295,9 @@ function draw_gameover()
 	txt="click to continue"
 	print(txt,text_center(txt),48)
 	draw_mouse()
+	
+	txt="bwaha\nha ha!"
+	print(txt,104,34,blink())
 end
 -->8
 -- minions
@@ -334,7 +373,7 @@ function update_minion(m)
 	m.t+=1
 	m.flash=max(0,m.flash-1)
 	
-	if ally_t.life<=0 or ally_t.life<=0 then
+	if ally_t.life<=0 or baddie_t.life<=0 then
 		return
 	end
 	
@@ -634,7 +673,7 @@ function destroy_tower(tw)
 	if is_ally_tower(tw) then
 		init_gameover()
 	else
-		init_victory()
+		next_level()
 	end
 end
 
@@ -689,6 +728,13 @@ function text_center(txt,src_x,scale)
 	
 	return src_x-(#txt*2*scale)
 end
+
+function blink()
+	local colors={5,5,5,5,5,5,5,5,5,5,5,6,6,7,7,6,6}
+	local i=t % #colors
+	
+	return colors[i+1]
+end
 -->8
 -- ui
 
@@ -717,11 +763,28 @@ end
 
 function draw_hud()
 	draw_souls()
+	
+	-- draw level label
+	local txt=("level "..level)..("/"..max_level)
+	print(txt,text_center(txt),120,7)
+	
+	-- draw tutorial texts
+	if baddie_t.life<=0 then
+		return
+	end
+	if level<=2 and souls>=2 then
+		txt="click to\nsummon ->"
+		print(txt,20,91,blink())
+	end
+	if level==2 and souls<2 then
+		txt=" collect souls\nto summon again"
+		print(txt,text_center("to summon again"),32,blink())
+	end
 end
 
 function draw_souls()
 	local txt="✽"..souls
-	print(txt,text_center(txt,64),4,7)
+	print(txt,text_center(txt,64),2,7)
 end
 
 function draw_button(b)
