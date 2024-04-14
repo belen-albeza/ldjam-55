@@ -55,7 +55,8 @@ function reset_game()
 	
 	make_button(0,96,17,on_small_click,"2")
 	
-	spawn_minion(128,80,-1)
+	spawn_minion(50,80,1)
+	spawn_minion(90,80,-1)
 end
 -->8
 -- minions
@@ -64,6 +65,7 @@ function spawn_minion(x,y,dir,kind)
 		x=x,
 		y=y,
 		offset_x=0,
+		offset_y=0,
 		t=0,
 		dir=dir,
 		life=3,
@@ -86,14 +88,24 @@ function draw_minion(m)
 	local frame=(m.t/10)%2
 	local img=spr_for_minion(m)+frame
 	local flipx=m.dir<0
-
-	if m.flash>0 then
+	
+	-- dying fadeout
+	if m.status=="die" then
+		local colors={7,6,5,1}
+		local idx=flr(m.t/5)+1
+		local c=colors[idx]
+		
+		for i=1,15 do pal(i,c) end
+	-- flashing white
+	elseif m.flash>0 then
 		for i=1,15 do pal(i,7) end
 	end
 	
-	local x=m.x+m.offset_x
 	
-	spr(img,x-4,m.y-8,1,1,flipx)
+	local x=m.x+m.offset_x
+	local y=m.y+m.offset_y
+	
+	spr(img,x-4,y-8,1,1,flipx)
 	pal()
 end
 
@@ -123,6 +135,8 @@ function update_minion(m)
 		update_minion_move(m)
 	elseif m.status=="attack" then
 		update_minion_attack(m)
+	elseif m.status=="die" then
+		update_minion_die(m)
 	end
 end
 
@@ -152,6 +166,13 @@ function update_minion_attack(m)
 		end
 end
 
+function update_minion_die(m)
+	m.offset_y-=0.5
+	if abs(m.offset_y)>=10 then
+		del(minions,m)
+	end
+end
+
 function is_baddie(m)
 	return m.dir<0
 end
@@ -162,9 +183,11 @@ end
 
 function minions_vs_minions()
 	for m in all(minions) do
-		for other in all(minions) do
-			if is_collision_minion_vs_minion(m,other) then
-				attack_minion(m,other)
+		if m.status!="die" then
+			for other in all(minions) do
+				if is_collision_minion_vs_minion(m,other) then
+					attack_minion(m,other)
+				end
 			end
 		end
 	end
@@ -172,7 +195,7 @@ end
 
 function is_collision_minion_vs_minion(m,other)
 	-- avoid collision with themselves
-	if m==other then
+	if m==other or other.status=="die" then
 		return false
 	end
 	
@@ -193,7 +216,7 @@ function attack_minion(m,other)
 	
 	m.status="attack"
 	m.versus=other
-	m.atk=rnd(m.atk_ratio)
+	m.atk=rnd(m.atk_ratio/3)
 end
 
 function hit_minion(m)
@@ -202,11 +225,17 @@ function hit_minion(m)
 	m.life-=1
 	
 	if m.life<=0 then
-		del(minions,m)
+		kill_minion(m)
 		return true
 	end
 	
 	return false
+end
+
+function kill_minion(m)
+	m.offset_y=0
+	m.status="die"
+	m.t=0
 end
 
 function hit_ally_tower(m)
